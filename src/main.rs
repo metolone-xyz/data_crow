@@ -72,7 +72,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                     if let Some(keywords_element) = video_document.select(&keywords_selector).next() {
                         if let Some(keywords) = keywords_element.value().attr("content") {
                             println!("Title {}: {}", video_num, title);
-                            //println!("Keywords: {}", keywords);
+                            println!("Keywords: {}", keywords);
                             
                         }
                     }

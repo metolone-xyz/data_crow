@@ -8,7 +8,9 @@ use std::sync::Arc;
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let re_japanese = Regex::new(r"[\p{Script=Han}\p{Script=Hiragana}\p{Script=Katakana}ー]").unwrap();
-    let client = Arc::new(reqwest::Client::new());
+    let client = Arc::new(reqwest::Client::builder()
+    .timeout(std::time::Duration::from_secs(60))
+    .build()?);
     let mut skipped_videos = 0;
 
     for i in 1..=37 {
@@ -36,6 +38,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
                 let title_selector = Selector::parse("title").unwrap();
                 let keywords_selector = Selector::parse(r#"meta[name="keywords"]"#).unwrap();
+               
 
                 if let Some(title_element) = video_document.select(&title_selector).next() {
                     let mut title = title_element.text().collect::<String>();
@@ -44,11 +47,14 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                     if !re_japanese_clone.is_match(&title) {
                         return Ok(Some(1));  // Skipped video
                     }
-
+                    
+                    
+    
                     if let Some(keywords_element) = video_document.select(&keywords_selector).next() {
                         if let Some(keywords) = keywords_element.value().attr("content") {
                             println!("Title: {}", title);
                             println!("Keywords: {}", keywords);
+                            
                         }
                     }
                 }

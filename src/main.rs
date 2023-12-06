@@ -4,17 +4,22 @@ use regex::Regex;
 use std::collections::HashSet;
 use tokio::task;
 use std::sync::{Arc, Mutex};
+use tokio::sync::Semaphore;
+use std::time::Instant;
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
+    let start = Instant::now();
     let re_japanese = Regex::new(r"[\p{Script=Han}\p{Script=Hiragana}\p{Script=Katakana}ー]").unwrap();
     let client = Arc::new(reqwest::Client::builder()
-    .timeout(std::time::Duration::from_secs(60))
-    .build()?);
-    
+        .timeout(std::time::Duration::from_secs(60))
+        .build()?);
+
     let skipped_videos = Arc::new(Mutex::new(0));
     let total_videos = Arc::new(Mutex::new(0));
 
+    // 新しいセマフォを設定して、同時に実行されるタスクの数を制限
+    let semaphore = Arc::new(Semaphore::new(1000));
 
     for i in 1..=37 {
         println!("-----------------------Page: {} -------------------------", i);
@@ -23,13 +28,11 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
             Ok(response) => response.text().await?,
             Err(e) => {
                 eprintln!("Error occurred while fetching {}: {}", search_url, e);
-                continue;  // Skip this iteration and proceed with the next one
+                continue;
             }
         };
 
-
         let document = Html::parse_document(&html_content);
-
         let video_url_selector = Selector::parse("div.thumb a").unwrap();
         let mut video_urls = HashSet::new();
 
@@ -45,9 +48,15 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
             let re_japanese_clone = re_japanese.clone();
             let skipped_videos_clone = Arc::clone(&skipped_videos);
             let total_videos_clone = Arc::clone(&total_videos);
+            let semaphore_clone = semaphore.clone();
 
+            // セマフォを使ってタスクの数を制限
             let task = task::spawn(async move {
-                let video_html = client_clone.get(&url).send().await?.text().await?;
+                let permit = semaphore_clone.acquire().await.unwrap();
+                let video_html = match client_clone.get(&url).send().await {
+                    Ok(response) => response.text().await?,
+                    Err(_) => return Ok::<_, reqwest::Error>(None),  // エラー時はタスクを終了
+                };
                 let video_document = Html::parse_document(&video_html);
 
                 let title_selector = Selector::parse("title").unwrap();
@@ -77,7 +86,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                         }
                     }
                 }
-
+                drop(permit);
                 Ok::<_, reqwest::Error>(None)
             });
             tasks.push(task);
@@ -91,6 +100,8 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     println!("Skipped Videos: {}", *skipped_videos.lock().unwrap());
     println!("Total Titles: {}", *total_videos.lock().unwrap());
 
+    let duration = start.elapsed();
+    println!("Time elapsed in expensive_function() is: {:?}", duration);
+
     Ok(())
 }
-

@@ -79,7 +79,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
             let task = task::spawn(async move {
                 let video_html = match client_clone.get(&url).send().await {
                     Ok(response) => response.text().await?,
-                    Err(_) => return Ok::<_, reqwest::Error>(None), // エラー時はタスクを終了
+                    Err(_) => return Ok::<Option<i32>, reqwest::Error>(None), // Specify the type for `None`
                 };
                 let video_document = Html::parse_document(&video_html);
 
@@ -92,11 +92,13 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
                     let mut total_videos_lock = total_videos_clone.lock().unwrap();
 
+                    /*
                     if !re_japanese_clone.is_match(&title) || title.chars().count() >= 16{
                         let mut skipped_videos_lock = skipped_videos_clone.lock().unwrap();
                         *skipped_videos_lock += 1;
                         return Ok(Some(1)); // Skipped video
                     }
+                    */
 
                     *total_videos_lock += 1;
                     let video_num = *total_videos_lock;
